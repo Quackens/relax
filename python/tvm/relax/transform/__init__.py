@@ -95,6 +95,7 @@ from .lazy_transform_params import LazyTransformParams
 from .lower_gpu_ipc_alloc_storage import LowerGPUIPCAllocStorage
 from .optimize_layout_transform import OptimizeLayoutTransform
 from .remove_redundant_reshape import RemoveRedundantReshape
+from .attach_cublas_dispatch import BLASDispatch
 
 # Import to register the legalization functions.
 from . import legalize_ops, tuning_api
