@@ -243,6 +243,67 @@ def test_matmul_offload(
     [
         # Regular
         ((8, 8), (8, 8), False, "none"),
+    ],
+)
+@pytest.mark.parametrize(
+    "in_dtype, out_dtype",
+    [
+        ("float16", "float16"),
+        ("float32", "float32"),
+    ],
+)
+def test_cublas_offload(
+    x_shape,
+    y_shape,
+    transpose_y,
+    epilogue,
+    in_dtype,
+    out_dtype,
+):
+    with_bias, activation = _epilogue_table[epilogue]
+    var_table = {}
+    concrete_x_shape = _to_concrete_shape(x_shape, var_table)
+    concrete_y_shape = _to_concrete_shape(y_shape, var_table)
+    x = np.random.randn(*concrete_x_shape).astype(in_dtype)
+    y = np.random.randn(*concrete_y_shape).astype(in_dtype)
+
+    if transpose_y:
+        y = np.swapaxes(y, -2, -1)
+        y_shape = (*y_shape[:-2], y_shape[-1], y_shape[-2])
+
+    if with_bias:
+        bias = np.random.randn(concrete_y_shape[-1]).astype(out_dtype)
+        args = (x, y, bias)
+    else:
+        bias = None
+        args = (x, y)
+
+    mod = get_relax_matmul_module(
+        x_shape,
+        y_shape,
+        in_dtype,
+        out_dtype,
+        bias_shape=bias.shape if with_bias else None,
+        transposed_y=transpose_y,
+        activation=activation,
+    )
+
+    target = tvm.target.Target("cuda")
+
+
+    out = tvm.relax.transform.BLASDispatch(target)(mod)
+    ref = build_and_run(mod, args, "llvm", legalize=True)
+
+    print(type(out))
+    print(type(ref))
+    
+    tvm.testing.assert_allclose(out, ref, rtol=1e-2, atol=1e-2)
+
+@pytest.mark.parametrize(
+    "x_shape, y_shape, transpose_y, epilogue",
+    [
+        # Regular
+        ((8, 8), (8, 8), False, "none"),
         ((_vars["a"], 8), (8, 16), False, "none"),
         # Transposed
         ((4, 16), (16, 128), True, "none"),
